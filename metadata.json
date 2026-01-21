@@ -1,0 +1,8 @@
+{
+  "name": "Lügendetektor Pi & Arduino",
+  "description": "A professional lie detector interface designed for Raspberry Pi with Arduino integration. Features live pulse monitoring, debug logging, and multi-phase gameplay.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
