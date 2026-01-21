@@ -7,25 +7,38 @@ interface PulseMonitorProps {
   color?: string;
 }
 
-export const PulseMonitor: React.FC<PulseMonitorProps> = ({ label, bpm, color = "text-red-600" }) => {
+export const PulseMonitor = React.memo<PulseMonitorProps>(({ label, bpm, color = "text-red-600" }) => {
   return (
-    <div className="flex flex-col items-center p-4 border border-green-500/30 rounded-lg bg-black/40">
-      <div className="text-xs uppercase tracking-widest text-green-500 mb-2">{label}</div>
-      <div className="flex items-baseline space-x-2">
-        <span className={`text-5xl font-bold font-mono ${color} animate-pulse`}>
+    <div className="flex flex-col items-center p-2 border border-green-500/20 rounded bg-black">
+      <div className="text-[7px] uppercase tracking-widest text-green-700 mb-1">{label}</div>
+      <div className="flex items-baseline space-x-1">
+        <span className={`text-2xl font-bold ${color}`}>
           {bpm > 0 ? bpm : '--'}
         </span>
-        <span className="text-xs text-green-700">BPM</span>
+        <span className="text-[7px] text-green-900 font-bold">BPM</span>
       </div>
-      <div className="mt-2 w-full h-8 flex items-end space-x-1">
-        {Array.from({ length: 10 }).map((_, i) => (
+      
+      <div className="mt-1 w-full h-4 flex items-end space-x-1 justify-center overflow-hidden">
+        {[0, 1, 2, 3].map((i) => (
           <div 
             key={i} 
-            className="w-full bg-red-600/50" 
-            style={{ height: `${Math.random() * 100}%`, transition: 'height 0.1s ease' }}
+            className="w-2 bg-red-600/30" 
+            style={{ 
+              height: '40%',
+              willChange: 'transform',
+              animation: `wiggle ${0.4 + i * 0.1}s ease-in-out infinite alternate`,
+              animationDelay: `${i * 0.1}s`
+            }}
           />
         ))}
       </div>
+
+      <style>{`
+        @keyframes wiggle {
+          from { transform: scaleY(0.5); opacity: 0.2; }
+          to { transform: scaleY(1.5); opacity: 0.5; }
+        }
+      `}</style>
     </div>
   );
-};
+});

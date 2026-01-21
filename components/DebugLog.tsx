@@ -6,21 +6,20 @@ interface DebugLogProps {
   logs: LogEntry[];
 }
 
-export const DebugLog: React.FC<DebugLogProps> = ({ logs }) => {
+export const DebugLog = React.memo<DebugLogProps>(({ logs }) => {
   return (
-    <div className="fixed top-4 left-4 w-64 h-48 bg-black/80 border border-green-500 rounded overflow-hidden z-50 flex flex-col font-mono text-[10px]">
-      <div className="bg-green-500 text-black px-2 py-1 font-bold flex justify-between items-center">
-        <span>LIVE INPUT MONITOR</span>
-        <span className="animate-pulse">●</span>
+    <div className="fixed top-2 left-2 w-48 h-32 bg-black border border-green-900 rounded overflow-hidden z-50 flex flex-col text-[9px]">
+      <div className="bg-green-900 text-black px-2 py-0.5 font-bold flex justify-between items-center text-[8px]">
+        <span>LOG_MONITOR</span>
+        <span className="animate-pulse">_</span>
       </div>
-      <div className="flex-1 overflow-y-auto p-2 scrollbar-hide flex flex-col-reverse">
+      <div className="flex-1 overflow-y-auto p-1.5 flex flex-col-reverse">
         {logs.map((log) => (
-          <div key={log.id} className="mb-1">
-            <span className="opacity-50">[{log.timestamp}]</span> {log.msg}
+          <div key={log.id} className="mb-0.5 leading-tight">
+            <span className="text-green-900">[{log.timestamp.split(':')[2]}]</span> {log.msg}
           </div>
         ))}
-        {logs.length === 0 && <div className="text-green-800 italic">SYSTEM READY...</div>}
       </div>
     </div>
   );
-};
+});

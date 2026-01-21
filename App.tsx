@@ -5,11 +5,11 @@ import { DebugLog } from './components/DebugLog';
 import { PulseMonitor } from './components/PulseMonitor';
 
 const QUESTIONS = [
-  "Hast du heute schon einmal gelogen?",
-  "Hast du KI für deine Hausarbeit genutzt?",
-  "Warst du gestern pünktlich?",
-  "Denkst du, dein Teampartner lügt gerade?",
-  "Bist du bereit für die Wahrheit?"
+  "Heute schon gelogen?",
+  "KI für Hausarbeit genutzt?",
+  "Gestern pünktlich gewesen?",
+  "Lügt dein Partner gerade?",
+  "Bereit für die Wahrheit?"
 ];
 
 declare global {
@@ -36,23 +36,20 @@ const App: React.FC = () => {
 
   const addLog = useCallback((msg: string) => {
     const newLog: LogEntry = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).substr(2, 4),
       msg,
       timestamp: new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
     };
-    setLogs(prev => [newLog, ...prev].slice(0, 50));
+    setLogs(prev => [newLog, ...prev].slice(0, 10));
   }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === 'p') {
-        setShowPreview(prev => !prev);
-        addLog(`Simulation Panel ${!showPreview ? 'aktiviert' : 'deaktiviert'}`);
-      }
+      if (e.key.toLowerCase() === 'p') setShowPreview(prev => !prev);
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showPreview, addLog]);
+  }, []);
 
   useEffect(() => {
     const host = window.location.hostname || 'localhost';
@@ -60,49 +57,30 @@ const App: React.FC = () => {
     socketRef.current = socket;
 
     if (socket) {
-      socket.on('connect', () => {
-        setIsHardwareConnected(true);
-        addLog("Hardware-Server (Pi) verbunden.");
-      });
-
-      socket.on('hardware_input', (data: {player: number, val: string}) => {
-        handleAnswer(data.player, data.val);
-      });
-
-      socket.on('live_pulse', (data: {p1: number, p2: number}) => {
-        setP1Bpm(data.p1);
-        setP2Bpm(data.p2);
-      });
-
-      socket.on('disconnect', () => {
-        setIsHardwareConnected(false);
-        addLog("Hardware-Server getrennt.");
-      });
+      socket.on('connect', () => { setIsHardwareConnected(true); addLog("SVR_OK"); });
+      socket.on('hardware_input', (data: {player: number, val: string}) => { handleAnswer(data.player, data.val); });
+      socket.on('live_pulse', (data: {p1: number, p2: number}) => { setP1Bpm(data.p1); setP2Bpm(data.p2); });
+      socket.on('disconnect', () => { setIsHardwareConnected(false); addLog("SVR_LOST"); });
     }
-
     return () => { if (socket) socket.disconnect(); };
   }, [addLog]);
 
   const navigatePhase = (dir: number) => {
     const phases = Object.values(GamePhase);
     const currentIndex = phases.indexOf(phase);
-    let nextIndex = currentIndex + dir;
-    if (nextIndex < 0) nextIndex = phases.length - 1;
-    if (nextIndex >= phases.length) nextIndex = 0;
-    
-    setPhase(phases[nextIndex]);
-    addLog(`Phase: ${phases[nextIndex]}`);
+    setPhase(phases[(currentIndex + dir + phases.length) % phases.length]);
   };
 
   const handleAnswer = (player: number, val: string) => {
-    addLog(`Spieler ${player} wählt: ${val}`);
+    addLog(`P${player}:${val.charAt(0)}`);
     if (player === 1) setP1Ans(val);
-    if (player === 2) setP2Ans(val);
+    else setP2Ans(val);
   };
 
   useEffect(() => {
     if (p1Ans && p2Ans && phase === GamePhase.ANSWERING) {
-      setTimeout(() => setPhase(GamePhase.MEASURING), 1000);
+      const t = setTimeout(() => setPhase(GamePhase.MEASURING), 500);
+      return () => clearTimeout(t);
     }
   }, [p1Ans, p2Ans, phase]);
 
@@ -111,11 +89,7 @@ const App: React.FC = () => {
       setTimer(15);
       timerRef.current = setInterval(() => {
         setTimer(prev => {
-          if (prev <= 1) {
-            clearInterval(timerRef.current!);
-            setPhase(GamePhase.RESULTS);
-            return 0;
-          }
+          if (prev <= 1) { clearInterval(timerRef.current!); setPhase(GamePhase.RESULTS); return 0; }
           return prev - 1;
         });
       }, 1000);
@@ -125,219 +99,143 @@ const App: React.FC = () => {
 
   const resetGame = () => {
     setPhase(GamePhase.DISCLAIMER);
-    setP1Ans(null);
-    setP2Ans(null);
-    setTimer(15);
+    setP1Ans(null); setP2Ans(null); setTimer(15);
     setCurrentQuestion(QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)]);
-    addLog("System Neustart...");
   };
 
   return (
-    <div className="min-h-screen w-full relative overflow-hidden flex flex-col items-center justify-center p-8 bg-[#050505] selection:bg-green-500 selection:text-black">
+    <div className="min-h-screen w-full relative flex flex-col items-center justify-center p-4 bg-[#050505]">
       <DebugLog logs={logs} />
 
-      {/* Quick Help Button */}
       <button 
         onClick={() => setShowHelp(true)}
-        className="fixed top-4 right-4 z-50 bg-green-900/30 hover:bg-green-500 hover:text-black text-green-500 border border-green-500 w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg"
-        title="Hilfe & Befehle"
+        className="fixed top-2 right-2 z-50 bg-black text-green-700 border border-green-900 w-6 h-6 flex items-center justify-center text-[10px] hover:text-green-500"
       >
-        <i className="fa-solid fa-terminal text-sm"></i>
+        [?]
       </button>
 
-      <div className="max-w-4xl w-full border-4 border-green-500 rounded-3xl p-10 bg-green-500/5 backdrop-blur-md z-10 flex flex-col items-center text-center shadow-[0_0_80px_rgba(0,255,0,0.15)] relative overflow-hidden">
+      <div className="max-w-3xl w-full border border-green-900 p-6 bg-black z-10 flex flex-col items-center text-center shadow-md relative">
         
-        {/* Status Indicator */}
-        <div className="absolute top-4 right-20 flex items-center space-x-3 bg-black/40 px-3 py-1 rounded-full border border-green-900">
-           <span className={`w-2 h-2 rounded-full ${isHardwareConnected ? 'bg-green-500 shadow-[0_0_8px_#00ff00]' : 'bg-red-500'} animate-pulse`}></span>
-           <span className="text-[10px] text-green-500 font-bold uppercase tracking-widest">{isHardwareConnected ? 'PI-Link Active' : 'No Hardware'}</span>
+        <div className="absolute top-1.5 right-2 flex items-center space-x-1">
+           <span className={`w-1 h-1 ${isHardwareConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+           <span className="text-[6px] text-green-900 font-bold">{isHardwareConnected ? 'LINK' : 'LOST'}</span>
         </div>
 
         {phase === GamePhase.DISCLAIMER && (
-          <div className="animate-in fade-in zoom-in duration-700 space-y-8 py-10">
-            <div className="relative inline-block">
-              <i className="fa-solid fa-microchip text-7xl text-green-500 mb-6 glow"></i>
-              <div className="absolute -top-2 -right-2 bg-red-600 text-white text-[10px] px-2 py-0.5 rounded font-bold animate-bounce uppercase">Live</div>
-            </div>
-            <h1 className="text-7xl font-black glow tracking-tighter uppercase italic leading-none">Lie Detector</h1>
-            <p className="text-green-600 font-bold text-xs tracking-[0.4em] opacity-60">EXPERIMENTAL BIO-FEEDBACK INTERFACE</p>
+          <div className="space-y-4 py-2">
+            <div className="text-2xl text-green-900 font-bold">[ BIO_DATA ]</div>
+            <h1 className="text-3xl font-black glow-text uppercase italic tracking-tighter">Lie Detector</h1>
             
-            <div className="grid grid-cols-2 gap-8 pt-10 w-full">
-              <PulseMonitor label="PROBAND 01" bpm={p1Bpm} />
-              <PulseMonitor label="PROBAND 02" bpm={p2Bpm} />
+            <div className="grid grid-cols-2 gap-4 pt-2 w-full">
+              <PulseMonitor label="PROB_01" bpm={p1Bpm} />
+              <PulseMonitor label="PROB_02" bpm={p2Bpm} />
             </div>
 
             <button 
               onClick={() => navigatePhase(1)}
-              className="mt-12 px-20 py-6 bg-green-500 text-black font-black text-3xl rounded-full hover:bg-green-400 transition-all shadow-[0_0_40px_rgba(0,255,0,0.3)] uppercase italic active:scale-95 group"
+              className="mt-4 px-8 py-2 bg-green-900 text-black font-black rounded hover:bg-green-500 transition-colors uppercase italic text-sm"
             >
-              Initialisieren <i className="fa-solid fa-chevron-right ml-4 group-hover:translate-x-2 transition-transform"></i>
+              INITIALISIEREN
             </button>
           </div>
         )}
 
-        {/* ... Other Phases ... */}
         {phase === GamePhase.SELECTION && (
-          <div className="animate-in slide-in-from-right duration-500 w-full space-y-12 py-10">
-            <h2 className="text-sm text-green-500/40 uppercase tracking-[0.5em] font-bold">Zentrale Fragestellung:</h2>
-            <div className="bg-green-500 text-black p-12 text-5xl font-black rounded-xl shadow-2xl glow transform -rotate-1 hover:rotate-0 transition-transform cursor-default">
+          <div className="w-full space-y-4 py-2">
+            <h2 className="text-[8px] text-green-900 uppercase font-bold tracking-widest">AKTIVE_FRAGE:</h2>
+            <div className="bg-green-900 text-black p-4 text-xl font-bold rounded">
               "{currentQuestion}"
             </div>
-            <div className="flex flex-col items-center space-y-4">
-              <p className="text-green-700 animate-pulse text-xs tracking-widest uppercase">System bereit für Datenerfassung</p>
-              <button onClick={() => navigatePhase(1)} className="px-14 py-4 border-2 border-green-500 text-green-500 font-black uppercase hover:bg-green-500 hover:text-black transition-all tracking-widest italic">Start Analyse</button>
-            </div>
+            <button onClick={() => navigatePhase(1)} className="px-6 py-2 border border-green-900 text-green-700 font-bold uppercase hover:bg-green-900 hover:text-black transition-colors text-xs">SCAN STARTEN</button>
           </div>
         )}
 
         {phase === GamePhase.ANSWERING && (
-          <div className="animate-in fade-in duration-500 w-full space-y-16 py-10">
-            <h2 className="text-4xl font-black uppercase tracking-tighter italic glow text-green-400">Dateneingabe Erwartet</h2>
-            <div className="grid grid-cols-2 gap-12">
-              <div className={`p-10 border-4 transition-all duration-500 rounded-2xl relative ${p1Ans ? 'border-green-500 bg-green-500/20 scale-105 shadow-[0_0_30px_rgba(0,255,0,0.3)]' : 'border-green-900/20 opacity-30 grayscale'}`}>
-                <h3 className="text-xs font-black text-green-600 mb-8 uppercase tracking-[0.3em]">Hardware Slot 01</h3>
-                <div className="text-6xl text-green-400 font-black uppercase italic tracking-tighter">{p1Ans || 'Waiting'}</div>
-                {p1Ans && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-green-500 text-black text-[10px] px-3 py-1 font-black rounded">RECEIVED</div>}
+          <div className="w-full space-y-6 py-2">
+            <h2 className="text-lg font-bold uppercase text-green-700">INPUT ERWARTET</h2>
+            <div className="grid grid-cols-2 gap-4">
+              <div className={`p-3 border transition-all ${p1Ans ? 'border-green-500 bg-green-900/10' : 'border-green-900/20 opacity-30'}`}>
+                <div className="text-[6px] text-green-900 mb-1 uppercase">S01</div>
+                <div className="text-xl text-green-500 font-bold uppercase italic">{p1Ans || '---'}</div>
               </div>
-              <div className={`p-10 border-4 transition-all duration-500 rounded-2xl relative ${p2Ans ? 'border-green-500 bg-green-500/20 scale-105 shadow-[0_0_30px_rgba(0,255,0,0.3)]' : 'border-green-900/20 opacity-30 grayscale'}`}>
-                <h3 className="text-xs font-black text-green-600 mb-8 uppercase tracking-[0.3em]">Hardware Slot 02</h3>
-                <div className="text-6xl text-green-400 font-black uppercase italic tracking-tighter">{p2Ans || 'Waiting'}</div>
-                {p2Ans && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-green-500 text-black text-[10px] px-3 py-1 font-black rounded">RECEIVED</div>}
+              <div className={`p-3 border transition-all ${p2Ans ? 'border-green-500 bg-green-900/10' : 'border-green-900/20 opacity-30'}`}>
+                <div className="text-[6px] text-green-900 mb-1 uppercase">S02</div>
+                <div className="text-xl text-green-500 font-bold uppercase italic">{p2Ans || '---'}</div>
               </div>
             </div>
           </div>
         )}
 
         {phase === GamePhase.MEASURING && (
-          <div className="animate-in zoom-in duration-700 w-full space-y-10 py-6">
-            <div className="flex flex-col items-center">
-               <h1 className="text-5xl font-black text-red-600 pulse-red tracking-tight uppercase italic mb-2">Stress-Level Scan</h1>
-               <div className="h-1 w-64 bg-red-900/30 rounded-full overflow-hidden">
-                  <div className="h-full bg-red-600 animate-[loading_15s_linear]" style={{width: '100%'}}></div>
-               </div>
-            </div>
-            <div className="text-[14rem] font-black text-green-500 leading-none glow tracking-tighter animate-pulse">{timer}</div>
-            <div className="grid grid-cols-2 gap-10 w-full">
-              <PulseMonitor label="BIO-DATA S01" bpm={p1Bpm} color="text-red-600" />
-              <PulseMonitor label="BIO-DATA S02" bpm={p2Bpm} color="text-red-600" />
+          <div className="w-full space-y-4 py-1">
+            <h1 className="text-xl font-bold text-red-700 pulse-red uppercase italic">SCANNING...</h1>
+            <div className="text-8xl font-black text-green-500 leading-none">{timer}</div>
+            <div className="grid grid-cols-2 gap-3 w-full">
+              <PulseMonitor label="BIOMET_01" bpm={p1Bpm} color="text-red-800" />
+              <PulseMonitor label="BIOMET_02" bpm={p2Bpm} color="text-red-800" />
             </div>
           </div>
         )}
 
         {phase === GamePhase.RESULTS && (
-          <div className="animate-in fade-in zoom-in duration-500 space-y-12 w-full py-6">
-            <h1 className="text-5xl font-black bg-green-500 text-black py-6 uppercase italic tracking-widest rounded-lg">Analyse-Protokoll</h1>
-            <div className="grid grid-cols-2 gap-10 text-left">
-              <div className="p-10 border-2 border-green-500/30 rounded-2xl bg-black/60 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-2 text-[10px] font-bold text-green-900 group-hover:text-green-500 transition-colors uppercase">File: P1_DATA</div>
-                <p className="text-[10px] text-green-700 uppercase font-black mb-4 tracking-widest">Aussage Proband 01:</p>
-                <p className="text-3xl font-bold mb-8 italic text-white">"{p1Ans}"</p>
-                <div className={`text-4xl font-black uppercase italic tracking-tighter p-4 border-2 rounded ${Math.abs(p1Bpm - 80) > 12 ? 'text-red-600 border-red-600/50 pulse-red bg-red-900/10' : 'text-green-500 border-green-500/50 bg-green-900/10'}`}>
-                  {Math.abs(p1Bpm - 80) > 12 ? 'Lügendetektion Positiv' : 'Keine Anomalie'}
+          <div className="space-y-4 w-full py-1">
+            <h1 className="text-xl font-bold bg-green-900 text-black py-1 uppercase italic tracking-widest">PROTOKOLL</h1>
+            <div className="grid grid-cols-2 gap-3 text-left">
+              <div className="p-3 border border-green-900/30 rounded">
+                <p className="text-[6px] text-green-900 uppercase mb-1">P1_RESULT:</p>
+                <p className="text-sm font-bold mb-2 italic">"{p1Ans}"</p>
+                <div className={`text-sm font-black p-1 border text-center ${Math.abs(p1Bpm - 80) > 12 ? 'text-red-700 border-red-900' : 'text-green-600 border-green-900'}`}>
+                  {Math.abs(p1Bpm - 80) > 12 ? 'POSITIVE' : 'NEGATIVE'}
                 </div>
               </div>
-              <div className="p-10 border-2 border-green-500/30 rounded-2xl bg-black/60 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-2 text-[10px] font-bold text-green-900 group-hover:text-green-500 transition-colors uppercase">File: P2_DATA</div>
-                <p className="text-[10px] text-green-700 uppercase font-black mb-4 tracking-widest">Aussage Proband 02:</p>
-                <p className="text-3xl font-bold mb-8 italic text-white">"{p2Ans}"</p>
-                <div className={`text-4xl font-black uppercase italic tracking-tighter p-4 border-2 rounded ${Math.abs(p2Bpm - 85) > 15 ? 'text-red-600 border-red-600/50 pulse-red bg-red-900/10' : 'text-green-500 border-green-500/50 bg-green-900/10'}`}>
-                  {Math.abs(p2Bpm - 85) > 15 ? 'Lügendetektion Positiv' : 'Keine Anomalie'}
+              <div className="p-3 border border-green-900/30 rounded">
+                <p className="text-[6px] text-green-900 uppercase mb-1">P2_RESULT:</p>
+                <p className="text-sm font-bold mb-2 italic">"{p2Ans}"</p>
+                <div className={`text-sm font-black p-1 border text-center ${Math.abs(p2Bpm - 85) > 15 ? 'text-red-700 border-red-900' : 'text-green-600 border-green-900'}`}>
+                  {Math.abs(p2Bpm - 85) > 15 ? 'POSITIVE' : 'NEGATIVE'}
                 </div>
               </div>
             </div>
-            <button onClick={resetGame} className="px-20 py-5 bg-red-600 text-white font-black rounded-full uppercase italic hover:bg-red-500 transition-all shadow-[0_0_30px_rgba(255,0,0,0.3)] text-xl">System Reboot</button>
+            <button onClick={resetGame} className="w-full py-2 bg-red-900 text-black font-black uppercase text-xs hover:bg-red-700">REBOOT</button>
           </div>
         )}
       </div>
 
-      {/* Setup Help Modal - UPDATED WITH INSTALLATION STEPS */}
       {showHelp && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
-          <div className="bg-zinc-950 border-2 border-green-500 p-8 rounded-2xl max-w-2xl w-full shadow-2xl animate-in zoom-in duration-300 overflow-y-auto max-h-[90vh]">
-             <div className="flex justify-between items-center mb-6 border-b border-green-900 pb-4">
-                <h3 className="text-xl font-black text-green-500 uppercase tracking-widest">Fehlersuche & Installation</h3>
-                <button onClick={() => setShowHelp(false)} className="text-green-500 hover:text-red-500 transition-colors"><i className="fa-solid fa-xmark text-2xl"></i></button>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95">
+          <div className="bg-black border border-green-900 p-4 rounded max-w-sm w-full text-[10px]">
+             <div className="flex justify-between items-center mb-4 border-b border-green-900 pb-1">
+                <h3 className="font-bold text-green-700 uppercase">SYS_HELP</h3>
+                <button onClick={() => setShowHelp(false)}>[X]</button>
              </div>
-             
-             <div className="space-y-6 font-mono text-sm">
-                <section className="bg-red-500/5 p-4 border border-red-500/20 rounded">
-                   <p className="text-red-500 text-xs mb-3 uppercase font-bold">Fehler: "npm: Kommando nicht gefunden"</p>
-                   <p className="text-green-800 text-[11px] mb-2 leading-relaxed">Das bedeutet, npm ist noch nicht auf deinem Pi installiert. Gib dies im Terminal ein:</p>
-                   <div className="bg-black p-3 border border-green-900 rounded text-green-400 space-y-1">
-                      <div>sudo apt update</div>
-                      <div>sudo apt install nodejs npm -y</div>
-                   </div>
-                </section>
-
-                <section>
-                   <p className="text-green-500 text-xs mb-3 uppercase font-bold border-l-2 border-green-500 pl-2">Klassischer Weg (Nach Installation)</p>
-                   <div className="bg-black p-3 border border-green-900 rounded text-green-400 space-y-1">
-                      <div>cd /home/berry/Dokumente/liedetector</div>
-                      <div className="text-green-800 text-[9px] mt-2 italic"># Terminal A (Hardware)</div>
-                      <div>source venv/bin/activate</div>
-                      <div>python3 app.py</div>
-                      <div className="text-green-800 text-[9px] mt-2 italic"># Terminal B (Webseite)</div>
-                      <div>npm install <span className="text-[9px]">(Nur beim ersten Mal!)</span></div>
-                      <div>npm run dev</div>
-                   </div>
-                </section>
-
-                <div className="bg-green-500/10 p-4 rounded border border-green-500/20">
-                   <p className="text-green-500 text-xs font-bold uppercase mb-1">Hinweis zu "ls":</p>
-                   <p className="text-green-600 text-[11px] leading-relaxed italic">
-                      Es heißt "ls" (kleines L für "list"), nicht "1s" (die Zahl Eins). 
-                   </p>
-                </div>
+             <div className="space-y-2 text-green-800">
+                <p>1. sudo apt update && sudo apt install nodejs npm -y</p>
+                <p>2. npm install && npm run dev</p>
+                <p>3. python3 app.py</p>
              </div>
-             
-             <button 
-                onClick={() => setShowHelp(false)}
-                className="w-full mt-8 py-4 bg-green-500 text-black font-black uppercase rounded hover:bg-green-400 transition-colors"
-             >
-                Verstanden!
-             </button>
+             <button onClick={() => setShowHelp(false)} className="w-full mt-4 py-2 bg-green-900 text-black font-bold uppercase">CLOSE</button>
           </div>
         </div>
       )}
 
-      {/* Hardware Simulation Overlay */}
       {showPreview && (
-        <div className="fixed bottom-8 right-8 p-8 bg-zinc-950 border-2 border-green-500 z-50 rounded-2xl shadow-[0_0_100px_rgba(0,0,0,1)] w-96 font-mono text-xs animate-in slide-in-from-right duration-300">
-          <div className="flex justify-between items-center mb-6 border-b border-green-900 pb-4">
-            <div className="flex items-center space-x-2">
-               <i className="fa-solid fa-terminal text-green-500"></i>
-               <span className="font-black text-green-500 tracking-tighter uppercase">Hardware Simulation</span>
-            </div>
-            <button onClick={() => setShowPreview(false)} className="text-green-900 hover:text-red-500 transition-colors font-bold">ESC</button>
+        <div className="fixed bottom-2 right-2 p-2 bg-black border border-green-900 z-50 w-32 text-[8px]">
+          <div className="flex justify-between items-center mb-1 border-b border-green-900 text-green-900 font-bold">
+            <span>SIM</span>
+            <button onClick={() => setShowPreview(false)}>X</button>
           </div>
-          <div className="space-y-6">
-            <div>
-              <p className="text-green-800 text-[9px] uppercase font-bold mb-3 tracking-widest">Input Simulation</p>
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => handleAnswer(1, 'Ja')} className="bg-green-900/10 p-3 border border-green-500/20 hover:bg-green-500 hover:text-black transition-all font-bold rounded">P1 JA</button>
-                <button onClick={() => handleAnswer(1, 'Nein')} className="bg-green-900/10 p-3 border border-green-500/20 hover:bg-green-500 hover:text-black transition-all font-bold rounded">P1 NEIN</button>
-                <button onClick={() => handleAnswer(2, 'Ja')} className="bg-green-900/10 p-3 border border-green-500/20 hover:bg-green-500 hover:text-black transition-all font-bold rounded">P2 JA</button>
-                <button onClick={() => handleAnswer(2, 'Nein')} className="bg-green-900/10 p-3 border border-green-500/20 hover:bg-green-500 hover:text-black transition-all font-bold rounded">P2 NEIN</button>
-              </div>
-            </div>
-            <div>
-              <p className="text-green-800 text-[9px] uppercase font-bold mb-3 tracking-widest">Phase Control</p>
-              <div className="flex space-x-2">
-                <button onClick={() => navigatePhase(-1)} className="flex-1 p-2 border border-green-900 text-green-900 hover:border-green-500 hover:text-green-500 rounded font-bold uppercase tracking-tighter">Zurück</button>
-                <button onClick={() => navigatePhase(1)} className="flex-1 p-2 border border-green-900 text-green-900 hover:border-green-500 hover:text-green-500 rounded font-bold uppercase tracking-tighter">Vorwärts</button>
-              </div>
-            </div>
-            <p className="text-[9px] text-green-900 italic pt-2 border-t border-green-900/30">INFO: Drücke 'P' im Spielbetrieb zum Umschalten.</p>
+          <div className="grid grid-cols-2 gap-1 mb-2">
+            <button onClick={() => handleAnswer(1, 'Ja')} className="border border-green-900 p-0.5">P1_J</button>
+            <button onClick={() => handleAnswer(1, 'Nein')} className="border border-green-900 p-0.5">P1_N</button>
+            <button onClick={() => handleAnswer(2, 'Ja')} className="border border-green-900 p-0.5">P2_J</button>
+            <button onClick={() => handleAnswer(2, 'Nein')} className="border border-green-900 p-0.5">P2_N</button>
+          </div>
+          <div className="flex space-x-1">
+            <button onClick={() => navigatePhase(-1)} className="flex-1 border border-green-900">REV</button>
+            <button onClick={() => navigatePhase(1)} className="flex-1 border border-green-900">FWD</button>
           </div>
         </div>
       )}
-      
-      <style>{`
-        @keyframes loading {
-          from { width: 0%; }
-          to { width: 100%; }
-        }
-      `}</style>
     </div>
   );
 };

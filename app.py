@@ -10,7 +10,7 @@ from flask_socketio import SocketIO, emit
 eventlet.monkey_patch()
 
 app = Flask(__name__)
-# Enable CORS for local development (Port 5173 for Vite)
+# Enable CORS for local development
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 # --- Hardware Setup ---
@@ -25,6 +25,7 @@ try:
     }
     
     def setup_callbacks():
+        # Using simple debounce to avoid double-triggers
         btns["p1_ja"].when_pressed = lambda: socketio.emit('hardware_input', {'player': 1, 'val': 'Ja'})
         btns["p1_ne"].when_pressed = lambda: socketio.emit('hardware_input', {'player': 1, 'val': 'Nein'})
         btns["p2_ja"].when_pressed = lambda: socketio.emit('hardware_input', {'player': 2, 'val': 'Ja'})
@@ -51,6 +52,7 @@ def init_serial():
     return False
 
 def arduino_worker():
+    last_emit_time = 0
     while True:
         if ser and ser.in_waiting > 0:
             try:
@@ -58,14 +60,16 @@ def arduino_worker():
                 if "," in line:
                     parts = line.split(",")
                     if len(parts) == 2:
-                        # Convert raw analog (0-1023) to pseudo BPM
-                        # Just a mapping for demonstration
-                        p1 = int(int(parts[0]) / 10) + 45
-                        p2 = int(int(parts[1]) / 10) + 45
-                        socketio.emit('live_pulse', {'p1': p1, 'p2': p2})
-            except Exception as e:
+                        # Throttling emission to 10Hz (every 0.1s)
+                        current_time = time.time()
+                        if current_time - last_emit_time > 0.1:
+                            p1 = int(int(parts[0]) / 10) + 45
+                            p2 = int(int(parts[1]) / 10) + 45
+                            socketio.emit('live_pulse', {'p1': p1, 'p2': p2})
+                            last_emit_time = current_time
+            except Exception:
                 pass
-        eventlet.sleep(0.05)
+        eventlet.sleep(0.02) # Higher frequency reading, but throttled emission
 
 if init_serial():
     threading.Thread(target=arduino_worker, daemon=True).start()
@@ -77,5 +81,4 @@ def on_connect():
 
 if __name__ == '__main__':
     print(">>> HARDWARE BACKEND STARTING ON http://0.0.0.0:5000")
-    # Using eventlet as the WSGI server
     socketio.run(app, host='0.0.0.0', port=5000)
