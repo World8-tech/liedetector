@@ -57,10 +57,27 @@ const App: React.FC = () => {
     socketRef.current = socket;
 
     if (socket) {
-      socket.on('connect', () => { setIsHardwareConnected(true); addLog("SVR_OK"); });
-      socket.on('hardware_input', (data: {player: number, val: string}) => { handleAnswer(data.player, data.val); });
-      socket.on('live_pulse', (data: {p1: number, p2: number}) => { setP1Bpm(data.p1); setP2Bpm(data.p2); });
-      socket.on('disconnect', () => { setIsHardwareConnected(false); addLog("SVR_LOST"); });
+      socket.on('connect', () => { 
+        setIsHardwareConnected(true); 
+      });
+      
+      socket.on('status', (data: {msg: string}) => {
+        addLog(data.msg);
+      });
+
+      socket.on('hardware_input', (data: {player: number, val: string}) => { 
+        handleAnswer(data.player, data.val); 
+      });
+
+      socket.on('live_pulse', (data: {p1: number, p2: number}) => { 
+        setP1Bpm(data.p1); 
+        setP2Bpm(data.p2); 
+      });
+
+      socket.on('disconnect', () => { 
+        setIsHardwareConnected(false); 
+        addLog("SVR_LOST"); 
+      });
     }
     return () => { if (socket) socket.disconnect(); };
   }, [addLog]);
@@ -89,7 +106,11 @@ const App: React.FC = () => {
       setTimer(15);
       timerRef.current = setInterval(() => {
         setTimer(prev => {
-          if (prev <= 1) { clearInterval(timerRef.current!); setPhase(GamePhase.RESULTS); return 0; }
+          if (prev <= 1) { 
+            if (timerRef.current) clearInterval(timerRef.current);
+            setPhase(GamePhase.RESULTS); 
+            return 0; 
+          }
           return prev - 1;
         });
       }, 1000);
@@ -99,7 +120,9 @@ const App: React.FC = () => {
 
   const resetGame = () => {
     setPhase(GamePhase.DISCLAIMER);
-    setP1Ans(null); setP2Ans(null); setTimer(15);
+    setP1Ans(null); 
+    setP2Ans(null); 
+    setTimer(15);
     setCurrentQuestion(QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)]);
   };
 
