@@ -27,6 +27,7 @@ const App: React.FC = () => {
   const [p2Ans, setP2Ans] = useState<string | null>(null);
   const [timer, setTimer] = useState<number>(15);
   const [showPreview, setShowPreview] = useState<boolean>(false);
+  const [showHelp, setShowHelp] = useState<boolean>(false);
   const [currentQuestion, setCurrentQuestion] = useState(QUESTIONS[0]);
   const [isHardwareConnected, setIsHardwareConnected] = useState(false);
 
@@ -54,8 +55,6 @@ const App: React.FC = () => {
   }, [showPreview, addLog]);
 
   useEffect(() => {
-    // Try to connect to Flask on port 5000 (Pi Backend)
-    // We use window.location.hostname to make it work from other devices in the network too
     const host = window.location.hostname || 'localhost';
     const socket = window.io ? window.io(`http://${host}:5000`) : null;
     socketRef.current = socket;
@@ -137,10 +136,19 @@ const App: React.FC = () => {
     <div className="min-h-screen w-full relative overflow-hidden flex flex-col items-center justify-center p-8 bg-[#050505] selection:bg-green-500 selection:text-black">
       <DebugLog logs={logs} />
 
+      {/* Quick Help Button */}
+      <button 
+        onClick={() => setShowHelp(true)}
+        className="fixed top-4 right-4 z-50 bg-green-900/30 hover:bg-green-500 hover:text-black text-green-500 border border-green-500 w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg"
+        title="Hilfe & Befehle"
+      >
+        <i className="fa-solid fa-terminal text-sm"></i>
+      </button>
+
       <div className="max-w-4xl w-full border-4 border-green-500 rounded-3xl p-10 bg-green-500/5 backdrop-blur-md z-10 flex flex-col items-center text-center shadow-[0_0_80px_rgba(0,255,0,0.15)] relative overflow-hidden">
         
         {/* Status Indicator */}
-        <div className="absolute top-4 right-8 flex items-center space-x-3 bg-black/40 px-3 py-1 rounded-full border border-green-900">
+        <div className="absolute top-4 right-20 flex items-center space-x-3 bg-black/40 px-3 py-1 rounded-full border border-green-900">
            <span className={`w-2 h-2 rounded-full ${isHardwareConnected ? 'bg-green-500 shadow-[0_0_8px_#00ff00]' : 'bg-red-500'} animate-pulse`}></span>
            <span className="text-[10px] text-green-500 font-bold uppercase tracking-widest">{isHardwareConnected ? 'PI-Link Active' : 'No Hardware'}</span>
         </div>
@@ -168,6 +176,7 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {/* ... Other Phases ... */}
         {phase === GamePhase.SELECTION && (
           <div className="animate-in slide-in-from-right duration-500 w-full space-y-12 py-10">
             <h2 className="text-sm text-green-500/40 uppercase tracking-[0.5em] font-bold">Zentrale Fragestellung:</h2>
@@ -241,6 +250,57 @@ const App: React.FC = () => {
         )}
       </div>
 
+      {/* Setup Help Modal - UPDATED WITH INSTALLATION STEPS */}
+      {showHelp && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+          <div className="bg-zinc-950 border-2 border-green-500 p-8 rounded-2xl max-w-2xl w-full shadow-2xl animate-in zoom-in duration-300 overflow-y-auto max-h-[90vh]">
+             <div className="flex justify-between items-center mb-6 border-b border-green-900 pb-4">
+                <h3 className="text-xl font-black text-green-500 uppercase tracking-widest">Fehlersuche & Installation</h3>
+                <button onClick={() => setShowHelp(false)} className="text-green-500 hover:text-red-500 transition-colors"><i className="fa-solid fa-xmark text-2xl"></i></button>
+             </div>
+             
+             <div className="space-y-6 font-mono text-sm">
+                <section className="bg-red-500/5 p-4 border border-red-500/20 rounded">
+                   <p className="text-red-500 text-xs mb-3 uppercase font-bold">Fehler: "npm: Kommando nicht gefunden"</p>
+                   <p className="text-green-800 text-[11px] mb-2 leading-relaxed">Das bedeutet, npm ist noch nicht auf deinem Pi installiert. Gib dies im Terminal ein:</p>
+                   <div className="bg-black p-3 border border-green-900 rounded text-green-400 space-y-1">
+                      <div>sudo apt update</div>
+                      <div>sudo apt install nodejs npm -y</div>
+                   </div>
+                </section>
+
+                <section>
+                   <p className="text-green-500 text-xs mb-3 uppercase font-bold border-l-2 border-green-500 pl-2">Klassischer Weg (Nach Installation)</p>
+                   <div className="bg-black p-3 border border-green-900 rounded text-green-400 space-y-1">
+                      <div>cd /home/berry/Dokumente/liedetector</div>
+                      <div className="text-green-800 text-[9px] mt-2 italic"># Terminal A (Hardware)</div>
+                      <div>source venv/bin/activate</div>
+                      <div>python3 app.py</div>
+                      <div className="text-green-800 text-[9px] mt-2 italic"># Terminal B (Webseite)</div>
+                      <div>npm install <span className="text-[9px]">(Nur beim ersten Mal!)</span></div>
+                      <div>npm run dev</div>
+                   </div>
+                </section>
+
+                <div className="bg-green-500/10 p-4 rounded border border-green-500/20">
+                   <p className="text-green-500 text-xs font-bold uppercase mb-1">Hinweis zu "ls":</p>
+                   <p className="text-green-600 text-[11px] leading-relaxed italic">
+                      Es heißt "ls" (kleines L für "list"), nicht "1s" (die Zahl Eins). 
+                   </p>
+                </div>
+             </div>
+             
+             <button 
+                onClick={() => setShowHelp(false)}
+                className="w-full mt-8 py-4 bg-green-500 text-black font-black uppercase rounded hover:bg-green-400 transition-colors"
+             >
+                Verstanden!
+             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Hardware Simulation Overlay */}
       {showPreview && (
         <div className="fixed bottom-8 right-8 p-8 bg-zinc-950 border-2 border-green-500 z-50 rounded-2xl shadow-[0_0_100px_rgba(0,0,0,1)] w-96 font-mono text-xs animate-in slide-in-from-right duration-300">
           <div className="flex justify-between items-center mb-6 border-b border-green-900 pb-4">

@@ -16,7 +16,7 @@ export const DebugLog: React.FC<DebugLogProps> = ({ logs }) => {
       <div className="flex-1 overflow-y-auto p-2 scrollbar-hide flex flex-col-reverse">
         {logs.map((log) => (
           <div key={log.id} className="mb-1">
-            <span className="opacity-50">[{log.timestamp}]</span> > {log.msg}
+            <span className="opacity-50">[{log.timestamp}]</span> {log.msg}
           </div>
         ))}
         {logs.length === 0 && <div className="text-green-800 italic">SYSTEM READY...</div>}
