@@ -43,7 +43,6 @@ const App: React.FC = () => {
     setLogs(prev => [newLog, ...prev].slice(0, 10));
   }, []);
 
-  // Hotkey 'P' für das Preview-Panel
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === 'p') setShowPreview(prev => !prev);
@@ -52,17 +51,17 @@ const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Socket.io Verbindung
   useEffect(() => {
     const host = window.location.hostname || 'localhost';
-    // Nutze window.io (geladen via CDN in index.html)
-    const socket = window.io ? window.io(`http://${host}:5000`) : null;
+    const socket = window.io ? window.io(`http://${host}:5000`, {
+        transports: ['websocket', 'polling']
+    }) : null;
     socketRef.current = socket;
 
     if (socket) {
       socket.on('connect', () => { 
         setIsHardwareConnected(true); 
-        addLog("LINK_ESTABLISHED");
+        addLog("WS_CONNECTED");
       });
       
       socket.on('status', (data: {msg: string}) => {
@@ -80,28 +79,26 @@ const App: React.FC = () => {
 
       socket.on('disconnect', () => { 
         setIsHardwareConnected(false); 
-        addLog("LINK_LOST"); 
+        addLog("WS_DISCONNECTED"); 
       });
     }
     return () => { if (socket) socket.disconnect(); };
   }, [addLog]);
 
   const handleAnswer = (player: number, val: string) => {
-    addLog(`P${player}_INPUT: ${val}`);
+    addLog(`P${player}_BTN: ${val.toUpperCase()}`);
     if (player === 1) setP1Ans(val);
     else setP2Ans(val);
   };
 
-  // Automatischer Übergang zur Messung
   useEffect(() => {
     if (p1Ans && p2Ans && phase === GamePhase.ANSWERING) {
-      addLog("START_ANALYSIS");
+      addLog("SEQ_START_MEASURE");
       const t = setTimeout(() => setPhase(GamePhase.MEASURING), 1000);
       return () => clearTimeout(t);
     }
   }, [p1Ans, p2Ans, phase, addLog]);
 
-  // Mess-Timer Logik
   useEffect(() => {
     if (phase === GamePhase.MEASURING) {
       setTimer(15);
@@ -126,7 +123,7 @@ const App: React.FC = () => {
   };
 
   const resetGame = () => {
-    addLog("SYS_REBOOT");
+    addLog("REBOOT_INIT");
     setPhase(GamePhase.DISCLAIMER);
     setP1Ans(null); 
     setP2Ans(null); 
@@ -135,146 +132,164 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen w-full relative flex flex-col items-center justify-center p-4 bg-[#050505] selection:bg-green-500 selection:text-black">
+    <div className="min-h-screen w-full relative flex flex-col items-center justify-center p-4 bg-[#050505] overflow-hidden">
       <DebugLog logs={logs} />
 
-      {/* Haupt-Interface */}
-      <div className="max-w-3xl w-full border border-green-900 p-8 bg-black z-10 flex flex-col items-center text-center shadow-[0_0_30px_rgba(0,50,0,0.3)] relative">
+      {/* Grid Background Effect */}
+      <div className="fixed inset-0 pointer-events-none opacity-10 bg-[linear-gradient(to_right,#00ff0011_1px,transparent_1px),linear-gradient(to_bottom,#00ff0011_1px,transparent_1px)] bg-[size:40px_40px]"></div>
+
+      <div className="max-w-3xl w-full border-2 border-green-900/50 p-10 bg-black/90 z-10 flex flex-col items-center text-center shadow-[0_0_50px_rgba(0,255,0,0.1)] relative rounded-lg">
         
-        {/* Status-Bar */}
-        <div className="absolute top-2 right-4 flex items-center space-x-2">
-           <span className={`w-2 h-2 rounded-full ${isHardwareConnected ? 'bg-green-500 shadow-[0_0_5px_#00ff00]' : 'bg-red-500 animate-pulse'}`}></span>
-           <span className="text-[8px] text-green-900 font-bold tracking-widest">{isHardwareConnected ? 'ONLINE' : 'OFFLINE'}</span>
+        {/* Hardware Status Indicator */}
+        <div className="absolute top-4 right-6 flex items-center space-x-3 bg-black/50 px-3 py-1 rounded-full border border-green-900/30">
+           <div className="flex flex-col items-end">
+             <span className="text-[7px] text-green-900 font-bold tracking-tighter uppercase leading-none">Uplink Status</span>
+             <span className="text-[9px] text-green-500 font-mono leading-none">{isHardwareConnected ? 'STABLE' : 'SEARCHING...'}</span>
+           </div>
+           <div className={`w-2.5 h-2.5 rounded-full ${isHardwareConnected ? 'bg-green-500 shadow-[0_0_8px_#00ff00]' : 'bg-red-600 animate-ping'}`}></div>
         </div>
 
         {phase === GamePhase.DISCLAIMER && (
-          <div className="space-y-6 py-4 animate-in fade-in duration-500">
-            <div className="text-sm text-green-900 font-bold tracking-[0.3em] uppercase opacity-50">Biometrisches Labor</div>
-            <h1 className="text-5xl font-black glow-text uppercase italic tracking-tighter leading-none mb-8">
-              Lügendetektor <span className="text-green-700">v1.2</span>
-            </h1>
+          <div className="space-y-10 py-6 animate-in fade-in zoom-in duration-700">
+            <div className="space-y-2">
+              <div className="text-[10px] text-green-800 font-black tracking-[0.5em] uppercase">Security Level 4 Authorization</div>
+              <h1 className="text-6xl font-black glow-text uppercase italic tracking-tighter leading-none">
+                Lügen<span className="text-green-800">detektor</span>
+              </h1>
+              <div className="text-xs text-green-900 font-bold uppercase tracking-widest">Biometrisches Erfassungs-System</div>
+            </div>
             
-            <div className="grid grid-cols-2 gap-8 w-full max-w-md mx-auto">
-              <PulseMonitor label="PROBAND_01" bpm={p1Bpm} />
-              <PulseMonitor label="PROBAND_02" bpm={p2Bpm} />
+            <div className="grid grid-cols-2 gap-10 w-full max-w-lg mx-auto">
+              <PulseMonitor label="Subject_Alpha" bpm={p1Bpm} color="#00ff00" />
+              <PulseMonitor label="Subject_Beta" bpm={p2Bpm} color="#00ff00" />
             </div>
 
             <button 
               onClick={() => navigatePhase(1)}
-              className="mt-12 px-12 py-3 bg-green-900 text-black font-black rounded-sm hover:bg-green-400 transition-all hover:scale-105 active:scale-95 uppercase italic text-lg shadow-lg"
+              className="group relative px-16 py-4 bg-green-900 text-black font-black rounded-sm hover:bg-green-400 transition-all hover:scale-105 active:scale-95 uppercase italic text-xl shadow-[0_0_20px_rgba(0,255,0,0.2)]"
             >
-              System Initialisieren
+              Starten
+              <span className="absolute -bottom-6 left-0 w-full text-[8px] text-green-900 opacity-0 group-hover:opacity-100 transition-opacity">Confirm System Access</span>
             </button>
           </div>
         )}
 
         {phase === GamePhase.SELECTION && (
-          <div className="w-full space-y-8 py-6">
-            <h2 className="text-xs text-green-700 uppercase font-bold tracking-widest animate-pulse">Wähle eine Testfrage</h2>
-            <div className="bg-green-900/10 border border-green-900/30 text-green-400 p-8 text-2xl font-bold rounded shadow-inner">
-              "{currentQuestion}"
+          <div className="w-full space-y-10 py-6 animate-in slide-in-from-bottom duration-500">
+            <h2 className="text-xs text-green-700 uppercase font-black tracking-[0.4em] animate-pulse">Konfiguration der Test-Matrix</h2>
+            <div className="relative group">
+                <div className="absolute -inset-1 bg-green-500/10 blur rounded"></div>
+                <div className="relative bg-black border-2 border-green-900/50 text-green-400 p-12 text-3xl font-black rounded italic shadow-2xl">
+                  "{currentQuestion}"
+                </div>
             </div>
-            <div className="flex space-x-4 justify-center">
+            <div className="flex space-x-6 justify-center">
                 <button 
-                    onClick={() => setCurrentQuestion(QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)])}
-                    className="px-4 py-2 border border-green-900 text-green-900 text-[10px] hover:text-green-500"
+                    onClick={() => {
+                        const next = QUESTIONS[(QUESTIONS.indexOf(currentQuestion) + 1) % QUESTIONS.length];
+                        setCurrentQuestion(next);
+                        addLog("Q_ROTATED");
+                    }}
+                    className="px-6 py-3 border border-green-900 text-green-900 text-[10px] font-black hover:border-green-500 hover:text-green-500 transition-all tracking-widest uppercase"
                 >
-                    NÄCHSTE FRAGE
+                    Nächste Frage
                 </button>
                 <button 
                     onClick={() => navigatePhase(1)} 
-                    className="px-8 py-3 bg-green-900 text-black font-black uppercase hover:bg-green-400 transition-colors text-sm"
+                    className="px-12 py-3 bg-green-900 text-black font-black uppercase hover:bg-green-400 transition-colors text-sm shadow-lg shadow-green-900/20"
                 >
-                    Frage bestätigen
+                    Bestätigen
                 </button>
             </div>
           </div>
         )}
 
         {phase === GamePhase.ANSWERING && (
-          <div className="w-full space-y-10 py-6">
-            <h2 className="text-xl font-bold uppercase text-green-700 tracking-widest">Warte auf Antworten...</h2>
-            <div className="grid grid-cols-2 gap-8">
-              <div className={`p-6 border-2 transition-all duration-300 ${p1Ans ? 'border-green-500 bg-green-900/20 scale-105' : 'border-green-900/10 opacity-40'}`}>
-                <div className="text-[10px] text-green-900 mb-2 uppercase font-bold">P1_STATUS</div>
-                <div className="text-3xl text-green-500 font-black uppercase italic">{p1Ans || 'HOLDING'}</div>
+          <div className="w-full space-y-12 py-6">
+            <div className="space-y-2">
+                <h2 className="text-3xl font-black uppercase text-green-500 italic tracking-widest">Input-Phase</h2>
+                <div className="text-[10px] text-green-900 uppercase font-bold tracking-[0.2em]">Warten auf Probanden-Rückmeldung</div>
+            </div>
+            <div className="grid grid-cols-2 gap-10 w-full">
+              <div className={`p-10 border-4 transition-all duration-500 ${p1Ans ? 'border-green-500 bg-green-500/10 scale-105' : 'border-green-900/20 opacity-30 grayscale'}`}>
+                <div className="text-[8px] text-green-900 mb-4 uppercase font-black tracking-widest">Alpha_State</div>
+                <div className="text-4xl text-green-500 font-black uppercase italic tracking-tighter">{p1Ans || 'Waiting'}</div>
               </div>
-              <div className={`p-6 border-2 transition-all duration-300 ${p2Ans ? 'border-green-500 bg-green-900/20 scale-105' : 'border-green-900/10 opacity-40'}`}>
-                <div className="text-[10px] text-green-900 mb-2 uppercase font-bold">P2_STATUS</div>
-                <div className="text-3xl text-green-500 font-black uppercase italic">{p2Ans || 'HOLDING'}</div>
+              <div className={`p-10 border-4 transition-all duration-500 ${p2Ans ? 'border-green-500 bg-green-500/10 scale-105' : 'border-green-900/20 opacity-30 grayscale'}`}>
+                <div className="text-[8px] text-green-900 mb-4 uppercase font-black tracking-widest">Beta_State</div>
+                <div className="text-4xl text-green-500 font-black uppercase italic tracking-tighter">{p2Ans || 'Waiting'}</div>
               </div>
             </div>
           </div>
         )}
 
         {phase === GamePhase.MEASURING && (
-          <div className="w-full space-y-6 py-2">
-            <h1 className="text-2xl font-black text-red-600 pulse-red uppercase italic tracking-[0.2em]">Bio-Analyse läuft</h1>
-            <div className="text-[120px] font-black text-green-500 leading-none tabular-nums shadow-text">
-              {timer}
+          <div className="w-full space-y-8 py-2 animate-in fade-in duration-1000">
+            <h1 className="text-3xl font-black text-red-600 pulse-red uppercase italic tracking-[0.3em]">Analyse läuft</h1>
+            <div className="relative py-4">
+                <div className="text-[140px] font-black text-green-500 leading-none tabular-nums shadow-text italic tracking-tighter">
+                {timer}
+                </div>
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 border border-red-900/20 rounded-full animate-ping pointer-events-none"></div>
             </div>
-            <div className="grid grid-cols-2 gap-6 w-full mt-4">
-              <PulseMonitor label="SENSOR_DATA_01" bpm={p1Bpm} color="text-red-700" />
-              <PulseMonitor label="SENSOR_DATA_02" bpm={p2Bpm} color="text-red-700" />
+            <div className="grid grid-cols-2 gap-10 w-full mt-4 bg-red-900/5 p-4 rounded border border-red-900/20">
+              <PulseMonitor label="Realtime_S_01" bpm={p1Bpm} color="#ff0000" />
+              <PulseMonitor label="Realtime_S_02" bpm={p2Bpm} color="#ff0000" />
             </div>
           </div>
         )}
 
         {phase === GamePhase.RESULTS && (
-          <div className="space-y-6 w-full py-4 animate-in zoom-in duration-500">
-            <h1 className="text-2xl font-black bg-green-900 text-black py-2 px-8 uppercase italic tracking-widest inline-block mb-4">Ergebnisprotokoll</h1>
+          <div className="space-y-8 w-full py-4 animate-in zoom-in-95 duration-700">
+            <h1 className="text-3xl font-black bg-green-900 text-black py-3 px-12 uppercase italic tracking-tighter inline-block shadow-xl">Ergebnisanalyse</h1>
             
-            <div className="grid grid-cols-2 gap-6 text-left">
-              <div className="p-5 border border-green-900/50 bg-black rounded shadow-lg">
-                <p className="text-[9px] text-green-900 uppercase mb-2 font-bold tracking-widest">Analyse Proband 01</p>
-                <p className="text-xl font-bold mb-4 italic text-green-400">"{p1Ans}"</p>
-                <div className={`text-sm font-black p-2 border-2 text-center ${Math.abs(p1Bpm - 80) > 15 ? 'text-red-600 border-red-900 bg-red-900/10' : 'text-green-500 border-green-900 bg-green-900/10'}`}>
-                  {Math.abs(p1Bpm - 80) > 15 ? 'VERDÄCHTIG (LÜGE)' : 'GLAUBWÜRDIG'}
+            <div className="grid grid-cols-2 gap-8 text-left">
+              {[
+                { label: 'Alpha', ans: p1Ans, bpm: p1Bpm, base: 80 },
+                { label: 'Beta', ans: p2Ans, bpm: p2Bpm, base: 85 }
+              ].map((p, i) => (
+                <div key={i} className="p-6 border-2 border-green-900/30 bg-black shadow-2xl relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-1 bg-green-900 text-[6px] font-bold text-black uppercase">Data_Node_{i+1}</div>
+                  <p className="text-[9px] text-green-900 uppercase mb-3 font-black tracking-widest">Proband {p.label}</p>
+                  <p className="text-2xl font-black mb-6 italic text-green-400 group-hover:text-green-200 transition-colors">"{p.ans}"</p>
+                  <div className={`text-sm font-black p-4 border-2 text-center uppercase tracking-widest transition-all ${Math.abs(p.bpm - p.base) > 15 ? 'text-red-500 border-red-900 bg-red-900/20 animate-pulse' : 'text-green-500 border-green-900 bg-green-500/10'}`}>
+                    {Math.abs(p.bpm - p.base) > 15 ? 'Lüge Detektiert' : 'Glaubwürdig'}
+                  </div>
                 </div>
-              </div>
-              <div className="p-5 border border-green-900/50 bg-black rounded shadow-lg">
-                <p className="text-[9px] text-green-900 uppercase mb-2 font-bold tracking-widest">Analyse Proband 02</p>
-                <p className="text-xl font-bold mb-4 italic text-green-400">"{p2Ans}"</p>
-                <div className={`text-sm font-black p-2 border-2 text-center ${Math.abs(p2Bpm - 85) > 15 ? 'text-red-600 border-red-900 bg-red-900/10' : 'text-green-500 border-green-900 bg-green-900/10'}`}>
-                  {Math.abs(p2Bpm - 85) > 15 ? 'VERDÄCHTIG (LÜGE)' : 'GLAUBWÜRDIG'}
-                </div>
-              </div>
+              ))}
             </div>
 
             <button 
               onClick={resetGame} 
-              className="mt-8 px-12 py-3 bg-red-900 text-black font-black uppercase text-sm hover:bg-red-600 transition-all active:scale-95"
+              className="mt-10 px-16 py-4 bg-red-900 text-black font-black uppercase text-lg hover:bg-red-500 transition-all hover:scale-105 shadow-2xl shadow-red-900/40 italic"
             >
-              System Neustart
+              System Reset
             </button>
           </div>
         )}
       </div>
 
-      {/* Preview Simulation Panel (Taste P) */}
       {showPreview && (
-        <div className="fixed bottom-4 right-4 p-4 bg-black/90 border-2 border-green-900 z-50 w-48 shadow-2xl backdrop-blur-sm">
-          <div className="flex justify-between items-center mb-4 border-b border-green-900 pb-2 text-green-500 font-black text-[10px] tracking-widest">
-            <span>SIMULATION</span>
-            <button onClick={() => setShowPreview(false)} className="hover:text-red-500">X</button>
+        <div className="fixed bottom-6 right-6 p-6 bg-black/95 border-2 border-green-900 z-50 w-56 shadow-[0_0_50px_rgba(0,0,0,1)] rounded-sm">
+          <div className="flex justify-between items-center mb-6 border-b border-green-900 pb-2 text-green-500 font-black text-[10px] tracking-widest uppercase">
+            <span>Simulation</span>
+            <button onClick={() => setShowPreview(false)} className="hover:text-red-500 transition-colors px-2">X</button>
           </div>
-          <div className="grid grid-cols-2 gap-2 mb-4">
-            <button onClick={() => handleAnswer(1, 'Ja')} className="border border-green-900 p-2 text-[10px] hover:bg-green-900/20">P1_JA</button>
-            <button onClick={() => handleAnswer(1, 'Nein')} className="border border-green-900 p-2 text-[10px] hover:bg-green-900/20">P1_NEIN</button>
-            <button onClick={() => handleAnswer(2, 'Ja')} className="border border-green-900 p-2 text-[10px] hover:bg-green-900/20">P2_JA</button>
-            <button onClick={() => handleAnswer(2, 'Nein')} className="border border-green-900 p-2 text-[10px] hover:bg-green-900/20">P2_NEIN</button>
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            <button onClick={() => handleAnswer(1, 'Ja')} className="border border-green-900/50 p-2 text-[10px] font-bold hover:bg-green-900 hover:text-black transition-all">P1_JA</button>
+            <button onClick={() => handleAnswer(1, 'Nein')} className="border border-green-900/50 p-2 text-[10px] font-bold hover:bg-green-900 hover:text-black transition-all">P1_NEIN</button>
+            <button onClick={() => handleAnswer(2, 'Ja')} className="border border-green-900/50 p-2 text-[10px] font-bold hover:bg-green-900 hover:text-black transition-all">P2_JA</button>
+            <button onClick={() => handleAnswer(2, 'Nein')} className="border border-green-900/50 p-2 text-[10px] font-bold hover:bg-green-900 hover:text-black transition-all">P2_NEIN</button>
           </div>
-          <div className="flex space-x-2">
-            <button onClick={() => navigatePhase(-1)} className="flex-1 border border-green-900 p-1 text-[8px] hover:bg-green-900/20">ZURÜCK</button>
-            <button onClick={() => navigatePhase(1)} className="flex-1 border border-green-900 p-1 text-[8px] hover:bg-green-900/20">VOR</button>
+          <div className="flex space-x-3">
+            <button onClick={() => navigatePhase(-1)} className="flex-1 border border-green-900/30 p-2 text-[8px] font-black hover:border-green-500">BACK</button>
+            <button onClick={() => navigatePhase(1)} className="flex-1 border border-green-900/30 p-2 text-[8px] font-black hover:border-green-500">NEXT</button>
           </div>
         </div>
       )}
 
-      {/* Hintergrund-Effekt */}
-      <div className="fixed inset-0 pointer-events-none z-0 opacity-20">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-green-900/20 via-transparent to-transparent"></div>
-      </div>
+      {/* CRT Scanline Effect */}
+      <div className="fixed inset-0 pointer-events-none z-50 opacity-[0.03] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[size:100%_4px,3px_100%]"></div>
     </div>
   );
 };
