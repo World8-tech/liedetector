@@ -3,57 +3,54 @@ import serial
 import time
 import threading
 import eventlet
-from flask import Flask, render_template
+from flask import Flask
 from flask_socketio import SocketIO, emit
 
-# Eventlet monkey patching for async performance
+# Eventlet monkey patching is required for SocketIO with Flask
 eventlet.monkey_patch()
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins="*")
-
-# State tracking for the Python side
-state = {
-    "p1_bpm": 0,
-    "p2_bpm": 0,
-}
+# Enable CORS for local development (Port 5173 for Vite)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 # --- Hardware Setup ---
-# Attempt to initialize GPIO for Raspberry Pi Buttons
 try:
     from gpiozero import Button
-    # GPIO Pins: 17=P1_JA, 27=P1_NEIN, 22=P2_JA, 23=P2_NEIN
-    btn_p1_ja = Button(17)
-    btn_p1_nein = Button(27)
-    btn_p2_ja = Button(22)
-    btn_p2_nein = Button(23)
+    # P1: Ja=17, Nein=27 | P2: Ja=22, Nein=23
+    btns = {
+        "p1_ja": Button(17),
+        "p1_ne": Button(27),
+        "p2_ja": Button(22),
+        "p2_ne": Button(23)
+    }
     
-    def setup_hardware_callbacks():
-        btn_p1_ja.when_pressed = lambda: socketio.emit('hardware_input', {'player': 1, 'val': 'Ja'})
-        btn_p1_nein.when_pressed = lambda: socketio.emit('hardware_input', {'player': 1, 'val': 'Nein'})
-        btn_p2_ja.when_pressed = lambda: socketio.emit('hardware_input', {'player': 2, 'val': 'Ja'})
-        btn_p2_nein.when_pressed = lambda: socketio.emit('hardware_input', {'player': 2, 'val': 'Nein'})
+    def setup_callbacks():
+        btns["p1_ja"].when_pressed = lambda: socketio.emit('hardware_input', {'player': 1, 'val': 'Ja'})
+        btns["p1_ne"].when_pressed = lambda: socketio.emit('hardware_input', {'player': 1, 'val': 'Nein'})
+        btns["p2_ja"].when_pressed = lambda: socketio.emit('hardware_input', {'player': 2, 'val': 'Ja'})
+        btns["p2_ne"].when_pressed = lambda: socketio.emit('hardware_input', {'player': 2, 'val': 'Nein'})
     
-    setup_hardware_callbacks()
-    print("GPIO Buttons initialized successfully.")
+    setup_callbacks()
+    print(">>> GPIO Buttons: OK")
 except Exception as e:
-    print(f"GPIO Error: {e}. Running in simulation mode for buttons.")
+    print(f">>> GPIO Error: {e} (Simulation mode active)")
 
-# Attempt to initialize Serial for Arduino
+# --- Serial / Arduino ---
 ser = None
-try:
-    # Common ports: /dev/ttyACM0 or /dev/ttyUSB0
-    ser = serial.Serial('/dev/ttyACM0', 9600, timeout=0.1)
-    print("Arduino connected on /dev/ttyACM0")
-except:
-    try:
-        ser = serial.Serial('/dev/ttyUSB0', 9600, timeout=0.1)
-        print("Arduino connected on /dev/ttyUSB0")
-    except:
-        print("Arduino not found. Running in simulation mode for pulse.")
-
-def read_arduino_thread():
+def init_serial():
     global ser
+    ports = ['/dev/ttyACM0', '/dev/ttyUSB0', '/dev/ttyACM1']
+    for port in ports:
+        try:
+            ser = serial.Serial(port, 9600, timeout=0.1)
+            print(f">>> Arduino connected on {port}")
+            return True
+        except:
+            continue
+    print(">>> Arduino NOT found (Simulation mode active)")
+    return False
+
+def arduino_worker():
     while True:
         if ser and ser.in_waiting > 0:
             try:
@@ -61,25 +58,24 @@ def read_arduino_thread():
                 if "," in line:
                     parts = line.split(",")
                     if len(parts) == 2:
-                        v1 = int(parts[0])
-                        v2 = int(parts[1])
-                        # Rough conversion from raw analog to pseudo BPM
-                        p1_bpm = int(v1 / 10) + 45
-                        p2_bpm = int(v2 / 10) + 45
-                        socketio.emit('live_pulse', {'p1': p1_bpm, 'p2': p2_bpm})
-            except:
+                        # Convert raw analog (0-1023) to pseudo BPM
+                        # Just a mapping for demonstration
+                        p1 = int(int(parts[0]) / 10) + 45
+                        p2 = int(int(parts[1]) / 10) + 45
+                        socketio.emit('live_pulse', {'p1': p1, 'p2': p2})
+            except Exception as e:
                 pass
-        time.sleep(0.05)
+        eventlet.sleep(0.05)
 
-if ser:
-    threading.Thread(target=read_arduino_thread, daemon=True).start()
+if init_serial():
+    threading.Thread(target=arduino_worker, daemon=True).start()
 
 @socketio.on('connect')
-def handle_connect():
-    print('Web client connected')
-    emit('status', {'msg': 'Connected to Pi Backend'})
+def on_connect():
+    print('Web client connected to hardware server')
+    emit('status', {'msg': 'Hardware Interface Active'})
 
 if __name__ == '__main__':
-    # In a real Pi environment, you'd serve the built React files or use a proxy
-    print("Starting Lie Detector Server on port 5000...")
+    print(">>> HARDWARE BACKEND STARTING ON http://0.0.0.0:5000")
+    # Using eventlet as the WSGI server
     socketio.run(app, host='0.0.0.0', port=5000)
